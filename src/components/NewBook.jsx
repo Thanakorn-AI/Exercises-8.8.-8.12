@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useMutation } from "@apollo/client";
 import { CREATE_BOOK, ALL_BOOKS, ALL_AUTHORS } from "../queries";
 
-const NewBook = ({ show, setError }) => {
+const NewBook = ({ show, setError, updateCacheWith }) => {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [published, setPublished] = useState("");
@@ -19,28 +19,37 @@ const NewBook = ({ show, setError }) => {
         setError('An error occurred while adding the book');
       }
     },
-    update: (cache, { data: { addBook } }) => {
-      // Update the cache for genre-specific queries
-      genres.forEach(genre => {
-        try {
-          const existingBooks = cache.readQuery({ 
-            query: ALL_BOOKS,
-            variables: { genre }
-          });
-          
-          if (existingBooks && addBook.genres.includes(genre)) {
-            cache.writeQuery({
+    update: (cache, { data }) => {
+      const addedBook = data?.addBook;
+      
+      // Use the updateCacheWith function if provided (for subscription support)
+      if (updateCacheWith && addedBook) {
+        updateCacheWith(addedBook);
+      }
+      
+      // Keep existing cache update logic for genre-specific queries
+      if (addedBook) {
+        genres.forEach(genre => {
+          try {
+            const existingBooks = cache.readQuery({ 
               query: ALL_BOOKS,
-              variables: { genre },
-              data: {
-                allBooks: [...existingBooks.allBooks, addBook]
-              }
+              variables: { genre }
             });
+            
+            if (existingBooks && addedBook.genres.includes(genre)) {
+              cache.writeQuery({
+                query: ALL_BOOKS,
+                variables: { genre },
+                data: {
+                  allBooks: [...existingBooks.allBooks, addedBook]
+                }
+              });
+            }
+          } catch (e) {
+            // Query not in cache yet, which is fine
           }
-        } catch (e) {
-          // Query not in cache yet, which is fine
-        }
-      });
+        });
+      }
     }
   });
 

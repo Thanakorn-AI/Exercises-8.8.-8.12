@@ -1,6 +1,6 @@
 // library-frontend/src/App.jsx
 import { useState, useEffect } from "react";
-import { useApolloClient, useQuery } from '@apollo/client';
+import { useApolloClient, useQuery, useSubscription } from '@apollo/client';
 import Authors from "./components/Authors";
 import Books from "./components/Books";
 import NewBook from "./components/NewBook";
@@ -8,7 +8,7 @@ import BirthYearForm from "./components/BirthYearForm";
 import LoginForm from "./components/LoginForm";
 import SignupForm from "./components/SignupForm";
 import RecommendedBooks from "./components/RecommendedBooks";
-import { ME } from './queries';
+import { ME, ALL_BOOKS, ALL_AUTHORS, BOOK_ADDED } from './queries';
 
 const Notify = ({ errorMessage }) => {
   if (!errorMessage) return null;
@@ -37,6 +37,66 @@ const App = () => {
     setErrorMessage(message);
     setTimeout(() => setErrorMessage(null), 5000);
   };
+
+  // Function to update cache when a new book is added
+  const updateCacheWith = (addedBook) => {
+    // Helper function to check if the book is already in the cache
+    const includedIn = (set, object) => 
+      set.map(b => b.id).includes(object.id);
+    
+    try {
+      // Update allBooks cache
+      const booksInCache = client.readQuery({ 
+        query: ALL_BOOKS,
+        variables: { genre: null } // Update the unfiltered view
+      });
+      
+      if (booksInCache && !includedIn(booksInCache.allBooks, addedBook)) {
+        client.writeQuery({
+          query: ALL_BOOKS,
+          variables: { genre: null },
+          data: { 
+            allBooks: [...booksInCache.allBooks, addedBook] 
+          }
+        });
+      }
+      
+      // Also update author's book count in ALL_AUTHORS query if needed
+      try {
+        const authorsInCache = client.readQuery({ query: ALL_AUTHORS });
+        if (authorsInCache) {
+          const updatedAuthors = authorsInCache.allAuthors.map(author => {
+            if (author.name === addedBook.author.name) {
+              return { ...author, bookCount: author.bookCount + 1 };
+            }
+            return author;
+          });
+          
+          client.writeQuery({
+            query: ALL_AUTHORS,
+            data: { allAuthors: updatedAuthors }
+          });
+        }
+      } catch (error) {
+        console.error('Error updating authors cache:', error);
+      }
+    } catch (error) {
+      console.error('Error updating book cache:', error);
+    }
+  };
+  
+  // Set up subscription for new books
+  useSubscription(BOOK_ADDED, {
+    onData: ({ data }) => {
+      const addedBook = data.data.bookAdded;
+      
+      // Notify user about the new book (Exercise 8.24)
+      window.alert(`New book added: ${addedBook.title} by ${addedBook.author.name}`);
+      
+      // Update cache to keep views in sync (Exercise 8.25)
+      updateCacheWith(addedBook);
+    }
+  });
 
   const logout = () => {
     // Clear token state
@@ -84,7 +144,11 @@ const App = () => {
 
       <Authors show={token && page === "authors"} />
       <Books show={token && page === "books"} />
-      <NewBook show={token && page === "add"} setError={notify} />
+      <NewBook 
+        show={token && page === "add"} 
+        setError={notify} 
+        updateCacheWith={updateCacheWith} 
+      />
       <BirthYearForm show={token && page === "birthyear"} setError={notify} />
       <LoginForm 
         show={page === "login"} 
