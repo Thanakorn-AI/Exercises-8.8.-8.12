@@ -6,28 +6,40 @@ import { ALL_BOOKS } from '../queries';
 const Books = (props) => {
   const [selectedGenre, setSelectedGenre] = useState(null);
   const [genres, setGenres] = useState([]);
+  const [allGenres, setAllGenres] = useState([]);
   
+  // Query for the currently selected genre (or all books if null)
   const result = useQuery(ALL_BOOKS, {
-    variables: { genre: selectedGenre }
+    variables: { genre: selectedGenre },
+    fetchPolicy: 'cache-and-network' // This helps with real-time updates
   });
 
+  // Execute a separate query to get all books for extracting all possible genres
+  const allBooksResult = useQuery(ALL_BOOKS, {
+    variables: { genre: null },
+    fetchPolicy: 'cache-and-network'
+  });
+
+  // Extract all unique genres whenever allBooks changes
   useEffect(() => {
-    if (result.data && result.data.allBooks) {
+    if (allBooksResult.data && allBooksResult.data.allBooks) {
       // Collect all unique genres from all books
-      const allGenres = result.data.allBooks.reduce((genreSet, book) => {
+      const genreSet = allBooksResult.data.allBooks.reduce((genreSet, book) => {
         book.genres.forEach(genre => genreSet.add(genre));
         return genreSet;
       }, new Set());
       
-      setGenres(Array.from(allGenres));
+      setAllGenres(Array.from(genreSet));
     }
-  }, [result.data]);
+  }, [allBooksResult.data]);
 
   if (!props.show) {
     return null;
   }
 
-  if (result.loading) {
+  const loading = result.loading || allBooksResult.loading;
+  
+  if (loading && !result.data && !allBooksResult.data) {
     return <div>loading...</div>;
   }
 
@@ -35,7 +47,7 @@ const Books = (props) => {
     return <div>Error: {result.error.message}</div>;
   }
 
-  const books = result.data.allBooks;
+  const books = result.data?.allBooks || [];
 
   return (
     <div>
@@ -67,7 +79,7 @@ const Books = (props) => {
       </table>
       
       <div style={{ marginTop: '20px' }}>
-        {genres.map(genre => (
+        {allGenres.map(genre => (
           <button 
             key={genre} 
             onClick={() => setSelectedGenre(genre)}

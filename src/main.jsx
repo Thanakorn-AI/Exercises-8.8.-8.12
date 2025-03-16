@@ -19,7 +19,7 @@ const httpLink = createHttpLink({
   uri: 'http://localhost:4000/graphql',
 });
 
-// Create WebSocket link for subscriptions
+// Create WebSocket link for subscriptions - with better error handling
 const wsLink = new GraphQLWsLink(
   createClient({
     url: 'ws://localhost:4000/graphql',
@@ -27,6 +27,21 @@ const wsLink = new GraphQLWsLink(
       const token = localStorage.getItem('library-user-token');
       return token ? { authorization: `bearer ${token}` } : {};
     },
+    // Add retry logic and better error handling
+    retryAttempts: 5,
+    retryWait: (retries) => new Promise((resolve) => 
+      setTimeout(resolve, Math.min(1000 * (2 ** retries), 10000))
+    ),
+    shouldRetry: (error) => true,
+    keepAlive: 10000, // Every 10 seconds
+    on: {
+      error: (error) => {
+        console.error('WebSocket error:', error);
+      },
+      connected: () => {
+        console.log('WebSocket connected');
+      }
+    }
   })
 );
 
@@ -63,7 +78,7 @@ const client = new ApolloClient({
       Query: {
         fields: {
           allBooks: {
-            // Merge function for allBooks query with different variables
+            // Make sure this correctly handles partial cache responses
             keyArgs: ['genre'],
             merge(existing = [], incoming) {
               return [...incoming];
