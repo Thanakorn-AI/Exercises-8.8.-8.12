@@ -60,28 +60,49 @@ const App = () => {
           }
         });
       }
-      
-      // Also update author's book count in ALL_AUTHORS query if needed
+    } catch (error) {
+      console.error('Error updating unfiltered cache:', error);
+      // This might fail if the query hasn’t been run yet, which is okay
+    }
+
+    // 2. Update all genre-specific views that match the new book's genres
+    addedBook.genres.forEach(genre => {
       try {
-        const authorsInCache = client.readQuery({ query: ALL_AUTHORS });
-        if (authorsInCache) {
-          const updatedAuthors = authorsInCache.allAuthors.map(author => {
-            if (author.name === addedBook.author.name) {
-              return { ...author, bookCount: author.bookCount + 1 };
-            }
-            return author;
-          });
-          
+        const genreBooks = client.readQuery({ 
+          query: ALL_BOOKS,
+          variables: { genre }
+        });
+        if (genreBooks && !includedIn(genreBooks.allBooks, addedBook)) {
           client.writeQuery({
-            query: ALL_AUTHORS,
-            data: { allAuthors: updatedAuthors }
+            query: ALL_BOOKS,
+            variables: { genre },
+            data: { 
+              allBooks: [...genreBooks.allBooks, addedBook] 
+            }
           });
         }
       } catch (error) {
-        console.error('Error updating authors cache:', error);
+        // Cache might not exist for this genre yet, so we ignore the error
+      }
+    });
+
+    // 3. Update author's book count in ALL_AUTHORS (keeping your existing logic)
+    try {
+      const authorsInCache = client.readQuery({ query: ALL_AUTHORS });
+      if (authorsInCache) {
+        const updatedAuthors = authorsInCache.allAuthors.map(author => {
+          if (author.name === addedBook.author.name) {
+            return { ...author, bookCount: author.bookCount + 1 };
+          }
+          return author;
+        });
+        client.writeQuery({
+          query: ALL_AUTHORS,
+          data: { allAuthors: updatedAuthors }
+        });
       }
     } catch (error) {
-      console.error('Error updating book cache:', error);
+      console.error('Error updating authors cache:', error);
     }
   };
   

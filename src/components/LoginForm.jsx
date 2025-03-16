@@ -9,7 +9,16 @@ const LoginForm = ({ show, setToken, setPage, setError }) => {
 
   const [login, result] = useMutation(LOGIN, {
     onError: (error) => {
-      setError(error.graphQLErrors[0].message);
+      // Add a safety check for when error or error.message is undefined
+      if (error && error.graphQLErrors && error.graphQLErrors.length > 0) {
+        setError(error.graphQLErrors[0].message);
+      } else if (error && error.message) {
+        setError(error.message);
+      } else if (error && error.networkError) {
+        setError(`Network error: ${error.networkError.message}`);
+      } else {
+        setError('Login failed. Please check your connection and try again.');
+      }
     }
   });
 
@@ -25,8 +34,8 @@ const LoginForm = ({ show, setToken, setPage, setError }) => {
   useEffect(() => {
     if (result.data) {
       const token = result.data.login.value;
-      localStorage.setItem('library-user-token', token);
       setToken(token);
+      localStorage.setItem('library-user-token', token);
       setPage('authors');
       
       // Clear fields after successful login
@@ -42,7 +51,14 @@ const LoginForm = ({ show, setToken, setPage, setError }) => {
   const submit = async (event) => {
     event.preventDefault();
 
-    login({ variables: { username, password } });
+    try {
+      await login({
+        variables: { username, password }
+      });
+    } catch (e) {
+      // The onError callback will handle error reporting
+      console.error('Login error caught:', e);
+    }
   };
 
   return (
@@ -68,7 +84,7 @@ const LoginForm = ({ show, setToken, setPage, setError }) => {
             autoComplete="current-password"
           />
         </div>
-        <button type="submit">login</button>
+        <button type='submit'>login</button>
       </form>
     </div>
   );

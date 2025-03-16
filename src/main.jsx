@@ -14,7 +14,7 @@ import { getMainDefinition } from '@apollo/client/utilities';
 import { GraphQLWsLink } from '@apollo/client/link/subscriptions';
 import { createClient } from 'graphql-ws';
 
-// Create HTTP link
+// Create HTTP link with explicit URL
 const httpLink = createHttpLink({
   uri: 'http://localhost:4000/graphql',
 });
@@ -23,6 +23,10 @@ const httpLink = createHttpLink({
 const wsLink = new GraphQLWsLink(
   createClient({
     url: 'ws://localhost:4000/graphql',
+    connectionParams: () => {
+      const token = localStorage.getItem('library-user-token');
+      return token ? { authorization: `bearer ${token}` } : {};
+    },
   })
 );
 
@@ -80,6 +84,7 @@ const client = new ApolloClient({
       fetchPolicy: 'cache-and-network',
     },
   },
+  connectToDevTools: true // Enable Apollo dev tools
 });
 
 ReactDOM.createRoot(document.getElementById("root")).render(
